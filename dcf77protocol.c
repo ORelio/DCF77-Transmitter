@@ -5,6 +5,8 @@
 #include <stdint.h>
 #include <time.h>
 
+static char dcf77_debug_string[100];
+
 // Calculates the even parity of an uint8_t array formatted following DCF77 format defined in dcf77_encode_data
 // begin: first element of array
 // end  : first-past-the-last element of the array
@@ -26,7 +28,8 @@ uint8_t dcf77_even_parity(uint8_t const* begin, uint8_t const* end)
 // There is a 1:1 encoding between the bit state expressed as an unsigned and the length of the OFF encoding, in units of 100ms
 //  0:  100ms OFF keying, 900ms ON keying, meaning a 0 (reset bit)
 //  1:  200ms OFF keying, 800ms ON keying, meaning a 1 (set bit)
-void dcf77_encode_data(struct tm* local_time, uint8_t* dcf77_one_minute_data)
+// Returns a string describing the encoded time data, for debug purposes
+char *dcf77_encode_data(struct tm* local_time, uint8_t* dcf77_one_minute_data)
 {
 	dcf77_one_minute_data[ 0] = 0; // Start of minute. Always reset
 
@@ -125,4 +128,17 @@ void dcf77_encode_data(struct tm* local_time, uint8_t* dcf77_one_minute_data)
 	dcf77_one_minute_data[58] = dcf77_even_parity(dcf77_one_minute_data + 36, dcf77_one_minute_data + 58); // date parity
 
 	//dcf77_one_minute_data[59] = Minute mark / End of transmission. This second is without modulation (no data transmitted)
+
+	snprintf(&dcf77_debug_string, 100,
+		"Year=%d%d, Month=%d%d, Day=%d%d, DayOfWeek=%d, Hour=%d%d, Minute=%d%d, DST=%d",
+		year_div_10, year_mod_10,
+		month_div_10, month_mod_10,
+		day_month_div_10, day_month_mod_10,
+		day_week,
+		hour_div_10, hour_mod_10,
+		minute_div_10, minute_mod_10,
+		local_time->tm_isdst
+	);
+
+	return &dcf77_debug_string;
 }

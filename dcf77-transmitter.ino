@@ -9,7 +9,7 @@
 //  [DONE] Resync with NTP on a regular basis (once per 6 hours)
 //  [DONE] Fix day of week, one-minute shift and DST in DCF payload
 //  [DONE] Disable LED for night time
-//  [NOPE] Add Wifi Manager? -> Nope, would need to configure TZ_INFO anyway.
+//  [TODO] Add Wifi Manager? -> Difficult, would need to configure TZ_INFO, disconnect without breaking Wifi Manager and skip Wifi Manager on subsequent NTP syncs.
 
 #include <ESP8266WiFi.h>
 #include "time.h"
@@ -25,8 +25,8 @@ const char* wifi_ssid   = "MyWyFiNetwork";
 const char* wifi_pass   = "S3cr3tWiFiP4ssw0rd";
 
 // NTP configuration
-const char* ntp_server = "fr.pool.ntp.org"; // https://www.ntppool.org/use.html
-const char* TZ_INFO = "CET-1CEST-2,M3.5.0/02:00:00,M10.5.0/03:00:00"; // Pick a time zone from https://remotemonitoringsystems.ca/time-zone-abbreviations.php
+const char* ntp_server = "fr.pool.ntp.org"; // https://www.ntppool.org/use.html - https://www.ntppool.org/tos.html
+const char* time_zone = "CET-1CEST-2,M3.5.0/02:00:00,M10.5.0/03:00:00"; // Pick a time zone from https://remotemonitoringsystems.ca/time-zone-abbreviations.php
 const int ntp_sync_interval_hours = 6; // How many hours between NTP syncs over Wi-Fi. Transmitter temporarily stops when syncing over Wi-Fi.
 
 // GPIO Pin configuration
@@ -95,8 +95,7 @@ struct tm *NtpSync()
 	Serial.println(ntp_server);
 	delay_retries = 0;
 	do {
-		configTime(0, 0, ntp_server);
-		setenv("TZ", TZ_INFO, 1);
+		configTime(time_zone, ntp_server); // https://github.com/esp8266/Arduino/blob/master/cores/esp8266/time.cpp
 		delay(500);
 		time(&rawtime);
 		timeinfo = localtime(&rawtime);
@@ -135,8 +134,8 @@ void setup()
 	}
 	Serial.println();
 
-	Serial.println("Calculating current DCF time code");
-	dcf77_encode_data(timeinfo, dcf77_data);
+	Serial.print("Calculating current DCF time code: ");
+	Serial.println(dcf77_encode_data(timeinfo, dcf77_data));
 }
 
 void loop()
@@ -177,8 +176,8 @@ void loop()
 		// Also resync with NTP server every few hours. Refresh times are derived from configured interval and time of first NTP sync
 		if (timeinfo->tm_min == ntp_sync_minute && (timeinfo->tm_hour + ntp_sync_hour_offset) % ntp_sync_interval_hours == 0)
 			NtpSync();
-		Serial.println("Calculating next DCF time code");
-		dcf77_encode_data(timeinfo, dcf77_data);
+		Serial.print("Calculating next DCF time code: ");
+		Serial.println(dcf77_encode_data(timeinfo, dcf77_data));
 	}
 
 	// Status info over serial
