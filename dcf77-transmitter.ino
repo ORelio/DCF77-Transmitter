@@ -5,12 +5,6 @@
 // https://github.com/luigicalligaris/dcfake77 - Base code and RF Transmission
 // https://github.com/SensorsIot/DCF77-Transmitter-for-ESP32 - NTP with correct timezone and daylight saving time
 
-// TODO list
-//  [DONE] Resync with NTP on a regular basis (once per 6 hours)
-//  [DONE] Fix day of week, one-minute shift and DST in DCF payload
-//  [DONE] Disable LED for night time
-//  [TODO] Add Wifi Manager? -> Difficult, would need to configure TZ_INFO, disconnect without breaking Wifi Manager and skip Wifi Manager on subsequent NTP syncs.
-
 #include <ESP8266WiFi.h>
 #include "time.h"
 #include "dcf77protocol.h"
@@ -21,8 +15,8 @@
  * ============== */
 
 // Wi-Fi configuration
-const char* wifi_ssid   = "MyWyFiNetwork";
-const char* wifi_pass   = "S3cr3tWiFiP4ssw0rd";
+//const char* wifi_ssid   = "MyWyFiNetwork";
+//const char* wifi_pass   = "S3cr3tWiFiP4ssw0rd";
 
 // NTP configuration
 const char* ntp_server = "fr.pool.ntp.org"; // https://www.ntppool.org/use.html - https://www.ntppool.org/tos.html
@@ -32,7 +26,7 @@ const int ntp_sync_interval_hours = 6; // How many hours between NTP syncs over 
 // GPIO Pin configuration
 const unsigned pwm_pin = 5;           // Antenna pin GPIO# - See https://randomnerdtutorials.com/esp8266-pinout-reference-gpios/
 const unsigned led_pin = LED_BUILTIN; // LED pin GPIO# or use LED_BUILTIN - See https://randomnerdtutorials.com/esp8266-pinout-reference-gpios/
-const bool led_enabled = false;       // Enable or disable built-in led. By default, flashes every second in transmitting mode, static on when syncing with NTP.
+const bool led_enabled = true;        // Enable or disable built-in led. By default, flashes every second in transmitting mode, static on when syncing with NTP.
 
 /* ============
  *  END CONFIG
@@ -44,10 +38,10 @@ const unsigned pwm_resolution = 3;     // Analog wave resolution (in bits)
 const unsigned pwm_duty_off   = 0;     // Analog wave amplitude in OFF state
 const unsigned pwm_duty_on    = 3;     // Analog wave amplitude in ON state
 
-// Global variables configured during setup()
+// Global variables initialized during setup()
 const int dcf77_datalen = 59;
 static uint8_t dcf77_data[dcf77_datalen];
-static int ntp_sync_hour_offset = 0;
+static int ntp_sync_hour = 0;
 static int ntp_sync_minute = 0;
 
 void PrintLocalTime()
@@ -84,10 +78,10 @@ struct tm *NtpSync()
 	while (WiFi.status() != WL_CONNECTED) {
 		delay(500);
 		Serial.print(".");
-	if (++delay_retries == 60) {
-		Serial.println(" Timeout");
-		ESP.restart(); // Give up after 30 seconds and hard reset the ESP to make sure the Wi-Fi chip will reboot as well
-	}
+		if (++delay_retries == 60) {
+			Serial.println(" Timeout");
+			ESP.reset(); // Give up after 30 seconds and hard reset the ESP to make sure the Wi-Fi chip will reboot as well
+		}
 	}
 	Serial.println(" Connected");
 
@@ -125,13 +119,9 @@ void setup()
 	pinMode(led_pin, OUTPUT);
 
 	struct tm * timeinfo = NtpSync();
+	ntp_sync_hour = (timeinfo->tm_hour + ntp_sync_interval_hours) % 24;
 	ntp_sync_minute = timeinfo->tm_min % 40 + 10; // Always sync between 10 and 50, transmission must be stable around o'clock
-	ntp_sync_hour_offset = timeinfo->tm_hour % ntp_sync_interval_hours;
-	Serial.print("NTP will resync at ");
-	for (int i = 0; i < 24; i++) {
-	if ((i + ntp_sync_hour_offset) % ntp_sync_interval_hours == 0)
-		Serial.printf("%02d:%02d ", i, ntp_sync_minute);
-	}
+	Serial.printf("NTP will resync at %02d:%02d", ntp_sync_hour, ntp_sync_minute);
 	Serial.println();
 
 	Serial.print("Calculating current DCF time code: ");
@@ -173,9 +163,9 @@ void loop()
 	// Refresh data array every minute
 	if (timeinfo->tm_sec == 0)
 	{
-		// Also resync with NTP server every few hours. Refresh times are derived from configured interval and time of first NTP sync
-		if (timeinfo->tm_min == ntp_sync_minute && (timeinfo->tm_hour + ntp_sync_hour_offset) % ntp_sync_interval_hours == 0)
-			NtpSync();
+		// Also resync with NTP server every few hours. Next resync time is calculated at startup.
+		if (timeinfo->tm_hour == ntp_sync_hour && timeinfo->tm_min == ntp_sync_minute)
+			ESP.reset(); // Hard-Reset ESP to relaunch sync. Just calling NtpSync() again could cause weird bugs such as issues with Wi-Fi or internal clock
 		Serial.print("Calculating next DCF time code: ");
 		Serial.println(dcf77_encode_data(timeinfo, dcf77_data));
 	}
