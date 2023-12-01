@@ -35,7 +35,7 @@ const bool led_enabled = true;        // Enable or disable built-in led. By defa
 // Constants for generating DCF77 sin wave base signal (77.5 kHz). Users of this sketch should not need to edit this.
 const unsigned pwm_freq       = 25833; // ESP8266 cannot directly generate 77500 Hz frequency. We use the 3rd harmonic of 25833 Hz to obtain 77.5 kHz
 const unsigned pwm_resolution = 3;     // Analog wave resolution (in bits)
-const unsigned pwm_duty_off   = 0;     // Analog wave amplitude in OFF state
+const unsigned pwm_duty_off   = 0;     // Analog wave amplitude in OFF state. Signal should be an attenuated in this state per specs, but OFF works just fine.
 const unsigned pwm_duty_on    = 3;     // Analog wave amplitude in ON state
 
 // Global variables initialized during setup()
@@ -131,20 +131,15 @@ void setup()
 void loop()
 {
 	time_t rawtime;
-	struct tm * timeinfo;
+	struct tm *timeinfo;
 	struct timeval tv;
-	time (&rawtime);
-	timeinfo = localtime (&rawtime);
+	time(&rawtime);
+	timeinfo = localtime(&rawtime);
 
 	// DCF77 radio is ON by default (signal transmitted at 100% strength)
-	// It transmits one bit per second by attenuating transmission (15%) for 100ms (0) or 200ms (1).
+	// It transmits one bit per second by attenuating transmission (from 100% to 15%) for 100ms (bit 0) or 200ms (bit 1).
 	// See https://en.wikipedia.org/wiki/DCF77#Amplitude_modulation
-	// Bits are sent in sync with each second so the receiver can synchronize its clock with transmitter
-
-	// Wait for next second and immediately transmit the next bit
-	gettimeofday(&tv, NULL);
-	delayMicroseconds(1000000-tv.tv_usec);
-
+	// Bits are sent in sync with each second so the receiver can synchronize its clock with transmitter.
 	if (timeinfo->tm_sec < dcf77_datalen)
 	{
 		// Transmit bit (0 or 1)
@@ -156,26 +151,37 @@ void loop()
 	}
 	else
 	{
-		// Last bit (59th bit) is not transmitted at all -not 0 nor 1-
+		// Last bit (59th bit) is not transmitted at all -not 0 nor 1- so the signal stays ON
 		analogWrite(pwm_pin, pwm_duty_on);
 	}
 
-	// Refresh data array every minute
-	if (timeinfo->tm_sec == 0)
-	{
-		// Also resync with NTP server every few hours. Next resync time is calculated at startup.
-		if (timeinfo->tm_hour == ntp_sync_hour && timeinfo->tm_min == ntp_sync_minute)
-			ESP.reset(); // Hard-Reset ESP to relaunch sync. Just calling NtpSync() again could cause weird bugs such as issues with Wi-Fi or internal clock
-		Serial.print("Calculating next DCF time code: ");
-		Serial.println(dcf77_encode_data(timeinfo, dcf77_data));
-	}
-
 	// Status info over serial
-	Serial.print("Transmitting bit ");
+	Serial.print("Transmitted bit ");
 	if (timeinfo->tm_sec >= dcf77_datalen)
 		Serial.print("-");
 	else
 		Serial.printf("%d", dcf77_data[timeinfo->tm_sec]);
 	Serial.print(" @ ");
 	PrintLocalTime();
+
+	// Resync with NTP server when reaching next resync time. Resync time is calculated at startup.
+	if (timeinfo->tm_hour == ntp_sync_hour && timeinfo->tm_min == ntp_sync_minute)
+	{
+		// Hard-Reset ESP to relaunch sync.
+		// Just calling NtpSync() again could cause weird bugs such as issues with Wi-Fi or internal clock
+		ESP.reset();
+	}
+
+	// Refresh data array every minute
+	if (timeinfo->tm_sec == 0)
+	{
+		// At this point, we just retransmitted bit 0 (start of transmission) from previous payload. This bit is always 0.
+		// We are now at second 0, dcf77_encode_data() can correctly compute next minute (payload time is one minute ahead).
+		Serial.print("Calculating next DCF time code: ");
+		Serial.println(dcf77_encode_data(timeinfo, dcf77_data));
+	}
+
+	// Wait for next second before looping
+	gettimeofday(&tv, NULL);
+	delayMicroseconds(1000000-tv.tv_usec);
 }
