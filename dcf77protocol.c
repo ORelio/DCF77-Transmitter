@@ -24,11 +24,13 @@ uint8_t dcf77_even_parity(uint8_t const* begin, uint8_t const* end)
 // Encode next minute time into the format used by the DCF77 protocol
 // Each code emitted contains the information for the following minute ("at minute mark, the time will be...")
 // i.e. the receiver loads transmitted information then starts counting at end of transmission (minute mark)
-// https://en.wikipedia.org/wiki/DCF77#Time_code_interpretation
-// https://www.ptb.de/cms/en/ptb/fachabteilungen/abt4/fb-44/ag-442/dissemination-of-legal-time/dcf77/dcf77-time-code.html
-// https://github.com/SensorsIot/DCF77-Transmitter-for-ESP32/blob/master/DFC77_ESP32/DFC77_ESP32.ino
-// https://cplusplus.com/reference/ctime/tm/ (mktime/localtime functions)
-// https://en.cppreference.com/w/c/chrono/localtime (localtime_r function)
+// Relevant documentation and sample code:
+//  https://www.ptb.de/cms/en/ptb/fachabteilungen/abt4/fb-44/ag-442/dissemination-of-legal-time/dcf77/dcf77-time-code.html
+//  https://en.wikipedia.org/wiki/DCF77#Time_code_interpretation
+//  https://github.com/luigicalligaris/dcfake77/blob/master/dcfake77-esp8266/dcf77protocol.c
+//  https://github.com/SensorsIot/DCF77-Transmitter-for-ESP32/blob/master/DFC77_ESP32/DFC77_ESP32.ino
+//  https://cplusplus.com/reference/ctime/tm/ (struct tm, mktime(), localtime())
+//  https://en.cppreference.com/w/c/chrono/localtime (localtime_r())
 // There is a 1:1 encoding between the bit state expressed as an unsigned and the length of the OFF encoding, in units of 100ms
 //  0:  100ms OFF keying, 900ms ON keying, meaning a 0 (reset bit)
 //  1:  200ms OFF keying, 800ms ON keying, meaning a 1 (set bit)
