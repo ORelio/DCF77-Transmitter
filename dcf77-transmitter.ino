@@ -26,9 +26,9 @@
 //const char* wifi_pass   = "S3cr3tWiFiP4ssw0rd";
 
 // NTP configuration
-const char* ntp_server = "fr.pool.ntp.org"; // https://www.ntppool.org/use.html - https://www.ntppool.org/tos.html
+const char* ntp_server = "pool.ntp.org"; // https://www.ntppool.org/use.html - https://www.ntppool.org/tos.html
 const char* time_zone = "CET-1CEST-2,M3.5.0/02:00:00,M10.5.0/03:00:00"; // Pick a time zone from https://remotemonitoringsystems.ca/time-zone-abbreviations.php
-const int ntp_sync_interval_hours = 6; // How many hours between NTP syncs over Wi-Fi. Transmitter temporarily stops when syncing over Wi-Fi.
+const int ntp_sync_interval_hours = 3; // How many hours between NTP syncs over Wi-Fi. Transmitter temporarily stops when syncing over Wi-Fi. ESP's internal clock is imprecise, keep the value low.
 
 // GPIO Pin configuration
 const unsigned pwm_pin = 5;           // Antenna pin GPIO# - See https://randomnerdtutorials.com/esp8266-pinout-reference-gpios/
@@ -39,7 +39,7 @@ const bool led_enabled = true;        // Enable or disable built-in led. If enab
 // ================================================
 // Power saving mode for running on battery - Only transmit signal a few minutes per hour during the time span where the clock actually tries to synchronize with the time signal.
 // Most clocks will try to synchronize every hour or every few hours a few minutes before o'clock. Adjust the values below to your needs.
-// This mode uses ESP's deep sleep mode. Need to wire GPIO16 (D0) to RST for waking up from deep sleep. Note that flashing the ESP may fail while D0 is wired to RST.
+// This mode uses ESP's deep sleep mode. Need to wire GPIO16 (D0) to RST for waking up from deep sleep, preferably using a resistor between 470-1K Ohm to avoid issues flashing the ESP.
 // * Default implementation: Continuously transmit time, resync with NTP every few hours according to ntp_sync_interval_hours defined above. Compliant with Ntppool.org ToS.
 // * Intermittent implementation: Only transmit time for a few minutes per hour, put ESP to deep sleep for the rest of the hour, then resync with NTP server and resume transmitting.
 // Important note about time keeping during deep sleep - Clock drift
@@ -52,6 +52,7 @@ const bool led_enabled = true;        // Enable or disable built-in led. If enab
 //  https://www.ntppool.org/tos.html
 //  https://vitux.com/how-to-setup-ntp-server-and-client-on-debian-11/
 //  https://www.letscontrolit.com/wiki/index.php?title=Tutorial_Battery_Powered_Devices
+//  https://www.esp8266.com/viewtopic.php?t=13101 // Problem flashing after RST and GPIO16 connected
 
 // Intermittent mode configuration
 const bool intermittent_mode = false;       // Set this to true to enable intermittent mode instead of continuous mode. Make sure to read caveats above.
@@ -74,6 +75,7 @@ const unsigned pwm_duty_on    = 3;     // Analog wave amplitude in ON state
 static uint8_t dcf77_data[DCF77_DATALEN];
 static int ntp_sync_hour = 0;
 static int ntp_sync_minute = 0;
+static int ntp_sync_second = 0;
 static int tx_minutes_remaining = 0;
 
 void PrintLocalTime()
@@ -119,9 +121,9 @@ struct tm *NtpSync()
 	WiFi.begin(wifi_ssid, wifi_pass);
 	delay_retries = 0;
 	while (WiFi.status() != WL_CONNECTED) {
-		delay(500);
+		delay(1000);
 		Serial.print(".");
-		if (++delay_retries == 60) {
+		if (++delay_retries == 30) {
 			Serial.println(" Timeout");
 			if (intermittent_mode)
 			{
@@ -141,13 +143,14 @@ struct tm *NtpSync()
 	Serial.print("Syncing with ");
 	Serial.println(ntp_server);
 	delay_retries = 0;
-	do {
-		configTime(time_zone, ntp_server); // https://github.com/esp8266/Arduino/blob/master/cores/esp8266/time.cpp
-		delay(500);
+	configTime(time_zone, ntp_server); // https://github.com/esp8266/Arduino/blob/master/cores/esp8266/time.cpp
+	while (timeinfo->tm_year == 70 && timeinfo->tm_yday == 0); // january 1st 1970 means not synced yet
+	{
+		delay(1000);
 		time(&rawtime);
 		timeinfo = localtime(&rawtime);
 		PrintLocalTime();
-		if (++delay_retries == 60) {
+		if (++delay_retries == 30) {
 			Serial.println("Timeout");
 			if (intermittent_mode)
 			{
@@ -161,7 +164,7 @@ struct tm *NtpSync()
 				ESP.restart(); // Give up after 30 seconds and restart program (clean reboot)
 			}
 		}
-	} while (timeinfo->tm_year == 70 && timeinfo->tm_yday == 0); // january 1st 1970 means not synced yet
+	}
 
 	Serial.print("Disconnecting from ");
 	Serial.println(wifi_ssid);
@@ -194,7 +197,8 @@ void setup()
 		Serial.println("Continuous mode: Transmitting all time long, except when syncing with NTP server.");
 		ntp_sync_hour = (timeinfo->tm_hour + ntp_sync_interval_hours) % 24;
 		ntp_sync_minute = timeinfo->tm_min % 40 + 10; // Always sync somewhere between 10 and 50, transmission must be stable around o'clock
-		Serial.printf("NTP will resync at %02d:%02d", ntp_sync_hour, ntp_sync_minute);
+		ntp_sync_second = timeinfo->tm_sec;
+		Serial.printf("NTP will resync at %02d:%02d:%02d", ntp_sync_hour, ntp_sync_minute, ntp_sync_second);
 		Serial.println();
 	}
 
@@ -248,7 +252,7 @@ void loop()
 	}
 
 	// Continuous mode (default): Resync with NTP server when reaching next resync time. Resync time is calculated at startup.
-	if (!intermittent_mode && timeinfo->tm_hour == ntp_sync_hour && timeinfo->tm_min == ntp_sync_minute)
+	if (!intermittent_mode && timeinfo->tm_hour == ntp_sync_hour && timeinfo->tm_min == ntp_sync_minute && timeinfo->tm_sec == ntp_sync_second)
 	{
 		// Hard-Reset ESP to relaunch sync.
 		// Just calling NtpSync() again could cause weird bugs such as issues with Wi-Fi or internal clock
