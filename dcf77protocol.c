@@ -37,7 +37,7 @@ uint8_t dcf77_even_parity(uint8_t const* begin, uint8_t const* end)
 // Returns a string describing the encoded time data, for debug purposes
 char *dcf77_encode_data(struct tm* local_time, uint8_t* dcf77_one_minute_data)
 {
-	// Compute next minute (payload constains next minute) and next hour (for summer time announcement)
+	// Compute next minute (payload contains next minute) and next hour (for summer time announcement)
 	// localtime(const time_t *timer) ESP implementation seems to ignore time_t argument and always return the same static tm struct containing local_time.
 	// Use localtime_r(const time_t *timer, struct tm *buf) instead in order to make sure each tm struct is allocated separately with desired time value.
 	time_t raw_time = mktime(local_time);

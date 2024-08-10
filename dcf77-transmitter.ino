@@ -1,5 +1,5 @@
 /* (c) 2018-2020 Luigi Calligaris. GPL v2+ */
-/* (c) 2023 ORelio - bug fixes and improvements */
+/* (c) 2023-2024 ORelio - bug fixes and improvements */
 
 #include <ESP8266WiFi.h>
 #include "time.h"
@@ -22,7 +22,7 @@
 // NOTE: DCF77 signaling is slow. Each time code takes a whole minute to transmit. Devices should need at least 1-3 minutes to properly synchronize to the signal.
 
 // Wi-Fi configuration
-//const char* wifi_ssid   = "MyWyFiNetwork";
+//const char* wifi_ssid   = "MyWiFiNetwork";
 //const char* wifi_pass   = "S3cr3tWiFiP4ssw0rd";
 
 // NTP configuration
