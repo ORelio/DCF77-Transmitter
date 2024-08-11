@@ -80,7 +80,7 @@ const bool led_enabled = true;
 
 * `pwm_pin`: Antenna pin GPIO. Default: GPIO5 (1)
 * `led_pin`: LED pin GPIO number or use LED_BUILTIN (1)
-* led_enabled`: Enable or disable status LED. If enabled, the LED flashes in transmitting mode, and stays on when syncing with NTP over Wi-Fi.
+* `led_enabled`: Enable or disable status LED. If enabled, the LED flashes in transmitting mode, and stays on when syncing with NTP over Wi-Fi.
 
 1. See [ESP8266 Pinout Reference](https://randomnerdtutorials.com/esp8266-pinout-reference-gpios/) or backed up [D1 Mini pinout diagram](images/d1-mini-pinout.png).
 
