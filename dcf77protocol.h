@@ -5,12 +5,12 @@
 #ifndef DCF77_PROTOCOL_H
 #define DCF77_PROTOCOL_H
 
-#include <stdint.h>
-#include <time.h>
-
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+#include <stdint.h>
+#include <time.h>
 
 #define DCF77_DATALEN 59
 uint8_t dcf77_even_parity(uint8_t const* begin, uint8_t const* end);

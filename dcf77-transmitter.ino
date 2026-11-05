@@ -144,26 +144,28 @@ struct tm *NtpSync()
 	Serial.println(ntp_server);
 	delay_retries = 0;
 	configTime(time_zone, ntp_server); // https://github.com/esp8266/Arduino/blob/master/cores/esp8266/time.cpp
-	while (timeinfo->tm_year == 70 && timeinfo->tm_yday == 0); // january 1st 1970 means not synced yet
+
+  // First, obtain the time so that timeinfo points to valid memory:
+  time(&rawtime);
+  timeinfo = localtime(&rawtime);
+	
+	// Now check and wait until NTP has set the time:
+	while (timeinfo->tm_year <= 70) // The year 1900 is the reference point
 	{
-		delay(1000);
-		time(&rawtime);
-		timeinfo = localtime(&rawtime);
-		PrintLocalTime();
-		if (++delay_retries == 30) {
-			Serial.println("Timeout");
-			if (intermittent_mode)
-			{
-				// Give up for this hour to save power, adjusting sleep delay by deducting time since boot.
-				Serial.println("Failed to sync with NTP server, retrying next hour.");
-				DeepSleepCorrected((uint64_t)3600000000 - system_get_time(), sleep_clock_correction);
-			}
-			else
-			{
-				Serial.println("Failed to sync with NTP server, restarting.");
-				ESP.restart(); // Give up after 30 seconds and restart program (clean reboot)
-			}
-		}
+	  delay(1000);
+	  time(&rawtime);
+	  timeinfo = localtime(&rawtime);
+	  PrintLocalTime();
+	  if (++delay_retries >= 30) {
+	    Serial.println("Timeout");
+	    if (intermittent_mode) {
+	      Serial.println("Failed to sync with NTP server, retrying next hour.");
+	      DeepSleepCorrected((uint64_t)3600000000 - system_get_time(), sleep_clock_correction);
+	    } else {
+	      Serial.println("Failed to sync with NTP server, restarting.");
+	      ESP.restart();
+	    }
+	  }
 	}
 
 	Serial.print("Disconnecting from ");
