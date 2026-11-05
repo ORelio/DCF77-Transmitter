@@ -36,14 +36,16 @@ A small antenna works very well if placed right behind your clock or a few centi
 
 ## Firmware configuration
 
+Copy `config.example.h` to `config.h`, then open the project in [Arduino IDE](https://www.arduino.cc/en/software) or [PlatformIO](https://platformio.org/).
+
 ### Wi-Fi settings
 
-Using [Arduino IDE](https://www.arduino.cc/en/software), open `dcf77-transmitter.ino`, uncomment and set Wi-Fi credentials:
+Go to `config.h` and set Wi-Fi credentials:
 
 ```C
 // Wi-Fi configuration
-//const char* wifi_ssid   = "MyWiFiNetwork";
-//const char* wifi_pass   = "S3cr3tWiFiP4ssw0rd";
+const char* wifi_ssid   = "MyWiFiNetwork";
+const char* wifi_pass   = "S3cr3tWiFiP4ssw0rd";
 ```
 
 Then select your board and flash the program.
@@ -117,7 +119,7 @@ const bool intermittent_mode = true;
 
 ### Debug your setup using serial
 
-Use `Tools` > `Serial Monitor` in Arduino IDE to show status messages and understand what is going on your transmitter. DCF77-Transmitter serial baud rate is `115200`.
+Use the serial monitor (e.g. `Tools` > `Serial Monitor` in Arduino IDE) to show status messages and understand what is going on your transmitter. DCF77-Transmitter serial baud rate is `115200`.
 
 ### Install your own NTP server
 
