@@ -100,28 +100,25 @@ struct tm *NtpSync()
 	delay_retries = 0;
 	configTime(time_zone, ntp_server); // https://github.com/esp8266/Arduino/blob/master/cores/esp8266/time.cpp
 
-  // First, obtain the time so that timeinfo points to valid memory:
-  time(&rawtime);
-  timeinfo = localtime(&rawtime);
-	
-	// Now check and wait until NTP has set the time:
-	while (timeinfo->tm_year <= 70) // The year 1900 is the reference point
+	// Wait for NTP sync to complete
+	do
 	{
-	  delay(1000);
-	  time(&rawtime);
-	  timeinfo = localtime(&rawtime);
-	  PrintLocalTime();
-	  if (++delay_retries >= 30) {
-	    Serial.println("Timeout");
-	    if (intermittent_mode) {
-	      Serial.println("Failed to sync with NTP server, retrying next hour.");
-	      DeepSleepCorrected((uint64_t)3600000000 - system_get_time(), sleep_clock_correction);
-	    } else {
-	      Serial.println("Failed to sync with NTP server, restarting.");
-	      ESP.restart();
-	    }
-	  }
+		delay(1000);
+		time(&rawtime);
+		timeinfo = localtime(&rawtime);
+		PrintLocalTime();
+		if (++delay_retries >= 30) {
+			Serial.println("Timeout");
+			if (intermittent_mode) {
+				Serial.println("Failed to sync with NTP server, retrying next hour.");
+				DeepSleepCorrected((uint64_t)3600000000 - system_get_time(), sleep_clock_correction);
+			} else {
+				Serial.println("Failed to sync with NTP server, restarting.");
+				ESP.restart();
+			}
+		}
 	}
+	while (timeinfo->tm_year == 70); // January 1st 1970 means not synced yet (unix epoch time); tm_year contains years since 1900, hence 70
 
 	Serial.print("Disconnecting from ");
 	Serial.println(wifi_ssid);
