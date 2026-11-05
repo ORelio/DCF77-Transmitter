@@ -1,0 +1,33 @@
+# ==========================================
+# User configuration (passwords / Wi-Fi)
+# ==========================================
+config.h
+
+# ==========================================
+# PlatformIO
+# ==========================================
+.pio/
+.vscode/
+
+# ==========================================
+# Arduino IDE
+# ==========================================
+# Binary files exported from the Arduino IDE
+build/
+*.bin
+*.hex
+*.elf
+
+# Local settings/caches of the Arduino IDE 2.x
+.arduino/
+
+# ==========================================
+# Operating System Junk
+# ==========================================
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# macOS
+.DS_Store
