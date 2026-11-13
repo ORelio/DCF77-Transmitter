@@ -1,5 +1,6 @@
 /* (c) 2018-2020 Luigi Calligaris. GPL v2+ */
 /* (c) 2023-2024 ORelio - bug fixes and improvements */
+/* Hardware Timer1 carrier generation for ~25.83 kHz (3rd harmonic ~77.5 kHz) */
 
 #include <ESP8266WiFi.h>
 #include "time.h"
@@ -20,11 +21,13 @@
  *  END CONFIG
  * ============ */
 
-// Constants for generating DCF77 sin wave base signal (77.5 kHz). Users of this sketch should not need to edit this.
-const unsigned pwm_freq       = 25833; // ESP8266 cannot directly generate 77500 Hz frequency. We use the 3rd harmonic of 25833 Hz to obtain 77.5 kHz
-const unsigned pwm_resolution = 3;     // Analog wave resolution (in bits)
-const unsigned pwm_duty_off   = 0;     // Analog wave amplitude in OFF state. Signal should be an attenuated in this state per specs, but OFF works just fine.
-const unsigned pwm_duty_on    = 3;     // Analog wave amplitude in ON state
+// Hardware Timer1 configuration for generating the 77.5 kHz carrier via its 3rd harmonic (~25.833 kHz).
+// Software PWM (analogWrite) quantizes to ~26.2 kHz (3rd harmonic ~78.6 kHz), missing the narrow DCF77 receiver filter.
+// Theoretical value: 80,000,000 Hz / (1548 * 2) = 25,839.79 Hz (3rd harmonic: 77,519.38 Hz).
+// Measured output (accounting for crystal tolerance & ISR latency): ~25,822 Hz (3rd harmonic: ~77,466 Hz).
+const uint32_t TIMER_TICKS = 1548;
+volatile bool carrier_enabled = false;
+
 
 // Global variables initialized during setup()
 static uint8_t dcf77_data[DCF77_DATALEN];
@@ -32,6 +35,19 @@ static int ntp_sync_hour = 0;
 static int ntp_sync_minute = 0;
 static int ntp_sync_second = 0;
 static int tx_minutes_remaining = 0;
+
+// Timer1 Interrupt Service Routine (runs in IRAM for maximum speed and stability)
+void IRAM_ATTR onTimerISR()
+{
+	if (carrier_enabled)
+	{
+		GPO ^= (1 << pwm_pin);  // Toggle antenna pin
+	}
+	else
+	{
+		GPOC = (1 << pwm_pin);  // Force antenna pin LOW when carrier is muted
+	}
+}
 
 void PrintLocalTime()
 {
@@ -134,11 +150,18 @@ void setup()
 {
 	Serial.begin(115200);
 	Serial.println("Initializing NTP to DCF77 gateway");
-	analogWriteFreq(pwm_freq);
-	analogWriteRange(pwm_resolution);
+	pinMode(pwm_pin, OUTPUT);
+	digitalWrite(pwm_pin, LOW);
 	pinMode(led_pin, OUTPUT);
 
+	// Sync time over Wi-Fi first before starting the high-frequency timer
 	struct tm *timeinfo = NtpSync();
+
+	// Initialize Hardware Timer1 for carrier generation
+	timer1_isr_init();
+	timer1_attachInterrupt(onTimerISR);
+	timer1_enable(TIM_DIV1, TIM_EDGE, TIM_LOOP);
+	timer1_write(TIMER_TICKS);
 
 	if (intermittent_mode)
 	{
@@ -176,15 +199,15 @@ void loop()
 	{
 		// Transmit bit (0 or 1)
 		SwitchLed(1);
-		analogWrite(pwm_pin, pwm_duty_off); // Instead of attenuating signal we completely stop it. Seems to work fine.
-		delayMicroseconds(dcf77_data[timeinfo->tm_sec] == 0 ? 100000 : 200000); //100 ms = 0, 200 ms = 1
+		carrier_enabled = false; // Stop carrier signal for bit modulation
+		delayMicroseconds(dcf77_data[timeinfo->tm_sec] == 0 ? 100000 : 200000); // 100 ms = 0, 200 ms = 1
 		SwitchLed(0);
-		analogWrite(pwm_pin, pwm_duty_on);
+		carrier_enabled = true;  // Resume carrier signal
 	}
 	else
 	{
 		// Last bit (59th bit) is not transmitted at all -not 0 nor 1- so the signal stays ON
-		analogWrite(pwm_pin, pwm_duty_on);
+		carrier_enabled = true;
 	}
 
 	// Status info over serial
@@ -210,12 +233,14 @@ void loop()
 	{
 		// Hard-Reset ESP to relaunch sync.
 		// Just calling NtpSync() again could cause weird bugs such as issues with Wi-Fi or internal clock
+		timer1_disable();
 		ESP.reset();
 	}
 
 	// Intermittent mode: Put ESP to deep sleep at end of transmission, then wake up every hour at the same minute for transmitting again.
 	if (intermittent_mode && timeinfo->tm_sec == 0 && --tx_minutes_remaining == 0)
 	{
+		timer1_disable();
 		int sleep_minutes = tx_minute_start - timeinfo->tm_min;
 		int wakeup_hour = timeinfo->tm_hour;
 		if (sleep_minutes < 0) {
@@ -229,7 +254,7 @@ void loop()
 		DeepSleepCorrected(delay_microseconds, sleep_clock_correction);
 	}
 
-	// Wait for next second before looping and transmitting next bit
+	// Wait for next second
 	gettimeofday(&tv, NULL);
-	delayMicroseconds(1000000-tv.tv_usec);
+	delayMicroseconds(1000000 - tv.tv_usec);
 }
